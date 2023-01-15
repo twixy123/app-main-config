@@ -1,0 +1,11 @@
+version: '3'
+
+services:
+  frontend:
+    image: name-of-image
+    build: ./
+    # path to Dockerfile to be started
+    ports:
+      - '80:8080'
+    # first - output, second input
+    container_name: name-of-container
