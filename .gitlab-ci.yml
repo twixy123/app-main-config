@@ -1,0 +1,33 @@
+stages:
+  - build
+  - deploy
+
+before_script:
+  - |
+    export DOCKER_TAG="${CI_COMMIT_SHA:0:8}"
+    export DOCKER_REPO="$CI_REGISTRY_IMAGE"
+
+buid:
+  image: docker:stable
+  services:
+    - docker:dind
+  stage: build
+  environment: prod
+  only:
+    - main
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker pull "${DOCKER_REPO}:${CI_ENVIRONMENT_NAME}" || docker pull "${DOCKER_REPO}:main" || true
+    - docker pull "${DOCKER_REPO}:${CI_ENVIRONMENT_NAME}" || true
+    - docker build --pull --cache-from "${DOCKER_REPO}:${CI_ENVIRONMENT_NAME}" --cache-from "${DOCKER_REPO}:main" -t "${DOCKER_REPO}:${CI_ENVIRONMENT_NAME}" .
+    - docker push "${DOCKER_REPO}:${CI_ENVIRONMENT_NAME}"
+
+deploy:
+  image: kroniak/ssh-client
+  stage: deploy
+  environment: prod
+  only:
+    - main
+  script:
+    - chmod 400 $MASTER_SSH_KEY
+    - ssh -o StrictHostKeyChecking=no -i $MASTER_SSH_KEY "${MASTER_SSH_USER}@${MASTER_HOST}" "docker login -u ${CI_DEPLOY_USER} -p ${CI_DEPLOY_PASSWORD} ${CI_REGISTRY} && docker rm -f ${CI_PROJECT_NAME} || true && docker rmi \$(docker images -q ${DOCKER_REPO}) || true && docker run -p 80:8080 --name=$CI_PROJECT_NAME --restart=always -d ${DOCKER_REPO}:${CI_ENVIRONMENT_NAME}"
